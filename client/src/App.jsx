@@ -37,23 +37,54 @@ function App() {
   const lastControlEmitAt = useRef(0);
 
   const isYoutubeVideo =
-    activeVideo.includes("youtube.com") ||
-    activeVideo.includes("youtu.be");
+    getYoutubeVideoId(activeVideo) !== null;
 
   const isEmbedVideo =
     activeVideo.includes("/embed/") ||
     activeVideo.includes("embed");
 
   const getYoutubeVideoId = (url) => {
+    if (!url) return null;
 
-    const regExp =
-      /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+    try {
 
-    const match = url.match(regExp);
+      const parsedUrl = new URL(url);
 
-    return match && match[2].length === 11
-      ? match[2]
-      : null;
+      // youtu.be short links
+      if (
+        parsedUrl.hostname === "youtu.be"
+      ) {
+        return parsedUrl.pathname.slice(1);
+      }
+
+      // youtube.com/watch?v=
+      if (
+        parsedUrl.searchParams.get("v")
+      ) {
+        return parsedUrl.searchParams.get("v");
+      }
+
+      // youtube.com/embed/
+      if (
+        parsedUrl.pathname.includes("/embed/")
+      ) {
+        return parsedUrl.pathname.split("/embed/")[1];
+      }
+
+      // youtube shorts
+      if (
+        parsedUrl.pathname.includes("/shorts/")
+      ) {
+        return parsedUrl.pathname.split("/shorts/")[1];
+      }
+
+      return null;
+
+    } catch {
+
+      return null;
+
+    }
 
   };
 
@@ -742,6 +773,17 @@ function App() {
 
                         emitPlaybackControl("pause");
 
+                      }}
+
+                      onError={(err) => {
+                        console.log(
+                          "Youtube Player Error:",
+                          err
+                        );
+
+                        alert(
+                          "This YouTube video cannot be embedded."
+                        );
                       }}
 
                     />
