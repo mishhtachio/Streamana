@@ -6,10 +6,6 @@ const { Server } = require("socket.io");
 const cors = require("cors");
 const PORT = process.env.PORT || 3001;
 
-server.listen(PORT, () => {
-  console.log(`Server running on ${PORT}`);
-});
-
 const app = express();
 
 app.use(cors());
@@ -21,6 +17,11 @@ const io = new Server(server, {
     origin: "*",
   },
 });
+
+server.listen(PORT, () => {
+  console.log(`Server running on ${PORT}`);
+});
+
 
 // Track which rooms each user is in
 const userRooms = {};
