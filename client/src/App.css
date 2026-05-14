@@ -1,0 +1,664 @@
+/* App.css */
+
+@import url("https://fonts.googleapis.com/css2?family=VT323&display=swap");
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+
+  font-family: "VT323", monospace;
+
+  background: #008080;
+}
+
+/* DESKTOP */
+
+.desktop {
+  width: 100vw;
+  height: 100vh;
+
+  position: relative;
+
+  background:
+    linear-gradient(
+      180deg,
+      #008080,
+      #006d6d
+    );
+}
+
+/* DESKTOP ICONS */
+
+.desktop-icon {
+  position: absolute;
+
+  top: 40px;
+  left: 30px;
+
+  width: 80px;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+
+  gap: 8px;
+
+  color: white;
+
+  font-size: 42px;
+
+  text-shadow: 1px 1px black;
+}
+
+.desktop-icon span {
+  font-size: 18px;
+}
+
+.desktop-icon.second {
+  top: 150px;
+}
+
+/* MAIN WINDOW */
+
+.window {
+  width: 1375px;
+  height: 836px;
+
+  position: absolute;
+
+  top: 50%;
+  left: 50%;
+
+  transform: translate(-50%, -52%);
+
+  background: #c0c0c0;
+
+  border:
+    3px solid white;
+
+  border-right-color: #404040;
+  border-bottom-color: #404040;
+
+  box-shadow:
+    inset -2px -2px 0 #808080,
+    inset 2px 2px 0 white,
+    10px 10px 0 rgba(0,0,0,0.25);
+
+  display: flex;
+  flex-direction: column;
+}
+
+/* TITLE BAR */
+
+.title-bar {
+  height: 42px;
+
+  background:
+    linear-gradient(
+      90deg,
+      #000080,
+      #1084d0
+    );
+
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+
+  padding: 0 10px;
+
+  color: white;
+
+  font-size: 24px;
+}
+
+.title-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* WINDOW BUTTONS */
+
+.window-buttons {
+  display: flex;
+  gap: 4px;
+}
+
+.window-buttons button {
+  width: 32px;
+  height: 28px;
+
+  border:
+    2px solid white;
+
+  border-right-color: #404040;
+  border-bottom-color: #404040;
+
+  background: #c0c0c0;
+
+  font-family: inherit;
+
+  font-size: 16px;
+
+  cursor: pointer;
+}
+
+/* MENU BAR */
+
+.menu-bar {
+  height: 34px;
+
+  display: flex;
+  align-items: center;
+
+  padding-left: 14px;
+
+  background: #c0c0c0;
+
+  border-bottom:
+    2px solid #808080;
+
+  font-size: 24px;
+
+  color: black;
+}
+
+/* CONTENT */
+
+.window-content {
+  flex: 1;
+
+  padding: 18px;
+
+  overflow: auto;
+}
+
+/* JOIN SCREEN */
+
+.join-screen {
+  height: 100%;
+
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+
+  gap: 40px;
+}
+
+/* BIG LOGO */
+
+.big-logo {
+  font-size: 82px;
+
+  color: #000080;
+
+  text-shadow:
+    2px 2px white;
+
+  letter-spacing: 3px;
+}
+
+/* JOIN PANEL */
+
+.join-panel {
+  width: 600px;
+
+  background: #c0c0c0;
+
+  border:
+    3px solid white;
+
+  border-right-color: #404040;
+  border-bottom-color: #404040;
+
+  padding: 25px;
+
+  display: flex;
+  flex-direction: column;
+
+  gap: 20px;
+}
+
+/* LABEL */
+
+.field-label {
+  font-size: 30px;
+}
+
+/* INPUT */
+
+.win95-input {
+  width: 100%;
+
+  padding: 12px;
+
+  background: white;
+
+  border:
+    3px solid #808080;
+
+  border-right-color: white;
+  border-bottom-color: white;
+
+  border-left-color: #404040;
+  border-top-color: #404040;
+
+  font-family: inherit;
+  color: #404040;
+  font-size: 28px;
+
+  outline: none;
+}
+
+/* BUTTON */
+
+.win95-button {
+  padding: 12px 20px;
+
+  background: #c0c0c0;
+
+  border:
+    3px solid white;
+
+  border-right-color: #404040;
+  border-bottom-color: #404040;
+
+  font-family: inherit;
+
+  font-size: 28px;
+  color:#4d4d4d;
+  cursor: pointer;
+}
+
+.win95-button:active {
+  border:
+    3px solid #404040;
+
+  border-right-color: white;
+  border-bottom-color: white;
+
+  transform: translateY(2px);
+}
+
+/* PLAYER LAYOUT */
+
+.player-layout {
+  display: flex;
+
+  gap: 18px;
+
+  height: 100%;
+}
+
+/* SIDEBAR */
+
+.sidebar {
+  width: 320px;
+
+  display: flex;
+  flex-direction: column;
+
+  gap: 18px;
+}
+
+/* RIGHT SIDEBAR */
+
+.right-sidebar {
+  width: 320px;
+
+  display: flex;
+  flex-direction: column;
+
+  gap: 18px;
+}
+
+/* MINI WINDOW */
+
+.mini-window {
+  background: #c0c0c0;
+
+  border:
+    3px solid white;
+
+  border-right-color: #404040;
+  border-bottom-color: #404040;
+}
+
+/* MINI TITLE */
+
+.mini-title {
+  height: 34px;
+
+  background:
+    linear-gradient(
+      90deg,
+      #000080,
+      #1084d0
+    );
+
+  color: white;
+
+  display: flex;
+  align-items: center;
+
+  padding-left: 10px;
+
+  font-size: 24px;
+}
+
+/* MINI BODY */
+
+.mini-body {
+  padding: 14px;
+
+  display: flex;
+  flex-direction: column;
+
+  gap: 10px;
+
+  font-size: 26px;
+  color:#4d4d4d
+}
+
+/* CONTROLS */
+
+.controls-grid {
+  display: grid;
+
+  grid-template-columns: repeat(3, 1fr);
+
+  gap: 10px;
+}
+
+/* MEDIA WINDOW */
+
+.media-window {
+  flex: 1;
+
+  display: flex;
+  flex-direction: column;
+
+  background: #c0c0c0;
+
+  border:
+    3px solid white;
+
+  border-right-color: #404040;
+  border-bottom-color: #404040;
+}
+
+/* MEDIA HEADER */
+
+.media-header {
+  height: 36px;
+
+  background:
+    linear-gradient(
+      90deg,
+      #000080,
+      #1084d0
+    );
+
+  color: white;
+
+  display: flex;
+  align-items: center;
+
+  padding-left: 12px;
+
+  font-size: 24px;
+}
+
+/* MEDIA BODY */
+
+.media-body {
+  flex: 1;
+
+  padding: 14px;
+
+  background: #808080;
+
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* VIDEO */
+
+.youtube-player {
+  width: 100%;
+  height: 100%;
+}
+
+.retro-video,
+.youtube-player iframe,
+.embed-player {
+  width: 100%;
+  height: 100%;
+
+  background: black;
+
+  border:
+    3px solid #404040;
+
+  border-right-color: white;
+  border-bottom-color: white;
+}
+
+/* STATUS BAR */
+
+.status-bar {
+  height: 34px;
+
+  background: #c0c0c0;
+
+  border-top:
+    2px solid white;
+
+  display: flex;
+  align-items: center;
+
+  padding-left: 12px;
+
+  font-size: 22px;
+}
+
+/* TASKBAR */
+
+.taskbar {
+  position: absolute;
+
+  bottom: 0;
+  left: 0;
+
+  width: 100%;
+  height: 44px;
+
+  background: #c0c0c0;
+
+  border-top:
+    3px solid white;
+
+  display: flex;
+  align-items: center;
+
+  padding: 0 8px;
+
+  gap: 10px;
+}
+
+/* START BUTTON */
+
+.start-button {
+  height: 34px;
+
+  padding: 0 15px;
+
+  background: #c0c0c0;
+
+  border:
+    3px solid white;
+
+  border-right-color: #404040;
+  border-bottom-color: #404040;
+
+  font-family: inherit;
+
+  font-size: 20px;
+
+  font-weight: bold;
+
+  cursor: pointer;
+}
+
+/* TASKBAR APP */
+
+.taskbar-app {
+  height: 32px;
+
+  display: flex;
+  align-items: center;
+
+  padding: 0 16px;
+
+  background: #808080;
+
+  border:
+    2px solid #404040;
+
+  border-right-color: white;
+  border-bottom-color: white;
+
+  font-size: 22px;
+}
+
+/* CLOCK */
+
+.clock {
+  margin-left: auto;
+
+  height: 32px;
+
+  display: flex;
+  align-items: center;
+
+  padding: 0 14px;
+
+  background: #c0c0c0;
+
+  border:
+    2px solid #808080;
+
+  border-right-color: white;
+  border-bottom-color: white;
+
+  font-size: 22px;
+}
+
+/* SCROLLBAR */
+
+::-webkit-scrollbar {
+  width: 16px;
+}
+
+::-webkit-scrollbar-track {
+  background: #c0c0c0;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #808080;
+
+  border:
+    2px solid white;
+}
+
+/* CHAT */
+
+.chat-window {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 200px;
+}
+
+.messages-container {
+  flex: 1;
+  overflow-y: auto;
+  border: 1px inset #808080;
+  padding: 8px;
+  background: white;
+  font-size: 20px;
+  max-height: 120px;
+}
+
+.chat-message {
+  margin-bottom: 4px;
+  margin-left: 4px;
+  word-wrap: break-word;
+  text-align: left;
+}
+
+.chat-username {
+  font-weight: bold;
+  color: #000080;
+}
+
+.chat-text {
+  color: #000000;
+  margin-left: 4px;
+}
+
+.chat-input {
+  padding: 4px !important;
+  font-size: 20px !important;
+}
+
+.send-button {
+  padding: 5px 20px;
+
+  background:
+    linear-gradient(
+      90deg,
+      #1d1d8f,
+      #1084d0
+    );
+
+  border:
+    3px solid white;
+
+  border-right-color: #404040;
+  border-bottom-color: #404040;
+
+  font-family: inherit;
+
+  font-size: 25px;
+
+  cursor: pointer;
+}
+
+/* MOBILE */
+
+@media (max-width: 1350px) {
+
+  .window {
+    width: 95%;
+    height: 90%;
+  }
+
+  .player-layout {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+  }
+
+  .big-logo {
+    font-size: 48px;
+  }
+}
