@@ -838,7 +838,7 @@ function App() {
         </button>
 
         <div className="taskbar-app">
-          Streamion
+          Streamana
         </div>
 
         <div className="clock">
