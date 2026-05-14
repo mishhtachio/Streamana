@@ -441,7 +441,7 @@ function App() {
         <div className="title-bar">
 
           <div className="title-left">
-            💿 Streamion.exe
+            💿 Streamana.exe
           </div>
 
           <div className="window-buttons">
@@ -467,7 +467,7 @@ function App() {
             <div className="join-screen">
 
               <div className="big-logo">
-                STREAMION 95
+                STREAMANA 95
               </div>
 
               <div className="join-panel">
