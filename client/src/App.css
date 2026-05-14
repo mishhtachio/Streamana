@@ -642,23 +642,179 @@ body {
 }
 
 /* MOBILE */
+@media (max-width: 900px) {
 
-@media (max-width: 1350px) {
+  body {
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .desktop {
+    min-height: 100vh;
+    height: auto;
+    padding-bottom: 70px;
+  }
+
+  .desktop-icon {
+    display: none;
+  }
 
   .window {
-    width: 95%;
-    height: 90%;
-  }
 
-  .player-layout {
-    flex-direction: column;
-  }
+    position: relative;
 
-  .sidebar {
     width: 100%;
+    min-height: calc(100vh - 60px);
+    height: auto;
+
+    left: unset;
+    top: unset;
+
+    transform: none;
+
+    margin: 0 auto;
+
+    border-left: none;
+    border-right: none;
+  }
+
+  .title-bar {
+    font-size: 18px;
+    height: 36px;
+  }
+
+  .window-buttons button {
+    width: 24px;
+    height: 22px;
+    font-size: 12px;
+  }
+
+  .menu-bar {
+    font-size: 18px;
+    height: auto;
+    padding: 6px 10px;
+    flex-wrap: wrap;
+  }
+
+  .window-content {
+    padding: 10px;
+  }
+
+  .join-screen {
+    gap: 20px;
+    padding: 10px;
   }
 
   .big-logo {
-    font-size: 48px;
-  } /*safe safe*/
+    font-size: 38px;
+    line-height: 1;
+    text-align: center;
+  }
+
+  .join-panel {
+    width: 100%;
+    padding: 16px;
+  }
+
+  .field-label {
+    font-size: 22px;
+  }
+
+  .win95-input {
+    font-size: 20px;
+    padding: 10px;
+  }
+
+  .win95-button {
+    font-size: 20px;
+    padding: 10px;
+  }
+
+  .player-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  /* SHOW NOW PLAYING FIRST ON MOBILE */
+
+  .media-window {
+    order: -1;
+  }
+
+  .sidebar {
+    order: 2;
+  }
+
+  .right-sidebar {
+    order: 3;
+  }
+
+  .sidebar,
+  .right-sidebar {
+    width: 100%;
+  }
+
+  .mini-title,
+  .media-header {
+    font-size: 18px;
+    height: auto;
+    min-height: 30px;
+    padding: 6px 10px;
+  }
+
+  .mini-body {
+    font-size: 18px;
+    padding: 10px;
+  }
+
+  .media-window {
+    min-height: 280px;
+  }
+
+  .media-body {
+    height: 240px;
+    padding: 6px;
+  }
+
+  .retro-video,
+  .youtube-player iframe,
+  .embed-player {
+    min-height: 220px;
+  }
+
+  .chat-window {
+    max-height: unset;
+  }
+
+  .messages-container {
+    max-height: 180px;
+    font-size: 16px;
+  }
+
+  .chat-input {
+    font-size: 18px !important;
+  }
+
+  .send-button {
+    width: 100%;
+    font-size: 18px;
+    padding: 10px;
+  }
+
+  .taskbar {
+    height: 50px;
+    gap: 6px;
+    padding: 0 6px;
+  }
+
+  .start-button,
+  .taskbar-app,
+  .clock {
+    font-size: 14px;
+    height: 30px;
+    padding: 0 8px;
+  }
+
 }
+
