@@ -330,6 +330,6 @@ io.on("connection", (socket) => {
 
     delete userNames[socket.id];
 
-  });
+  }); //safe safe
 
 });
