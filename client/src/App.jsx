@@ -36,9 +36,6 @@ function App() {
   });
   const lastControlEmitAt = useRef(0);
 
-  const isYoutubeVideo =
-    getYoutubeVideoId(activeVideo) !== null;
-
   const isEmbedVideo =
     activeVideo.includes("/embed/") ||
     activeVideo.includes("embed");
@@ -87,6 +84,9 @@ function App() {
     }
 
   };
+
+  const isYoutubeVideo =
+    getYoutubeVideoId(activeVideo) !== null;
 
   const suppressLocalEvents = () => {
 
