@@ -448,6 +448,13 @@ function App() {
 
   };
 
+  const goBack = () => {
+    setJoinedRoom("");
+    setRoomUsers([]);
+    setMessages([]);
+    setMessageInput("");
+  };
+
   return (
     <div className="desktop">
 
@@ -475,11 +482,17 @@ function App() {
             💿 Streamana.exe
           </div>
 
-          <div className="window-buttons">
-            <button>—</button>
-            <button>□</button>
-            <button>✕</button>
-          </div>
+          {joinedRoom ? (
+            <div className="back-buttons">
+              <button onClick={goBack}>← Back</button>
+            </div>
+          ) : (
+            <div className="window-buttons">
+              <button>—</button>
+              <button>□</button>
+              <button>✕</button>
+            </div>
+          )}
 
         </div>
 

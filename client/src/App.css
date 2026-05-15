@@ -147,6 +147,31 @@ body {
   cursor: pointer;
 }
 
+.back-buttons {
+  display: flex;
+  gap: 4px;
+}
+
+.back-buttons button {
+  width: 80px;
+  height: 30px;
+
+  border:
+    2px solid white;
+
+  border-right-color: #404040;
+  border-bottom-color: #404040;
+
+  background: #c0c0c0;
+
+  font-family: inherit;
+
+  font-size: 22px;
+  color: #000000;
+
+  cursor: pointer;
+}
+
 /* MENU BAR */
 
 .menu-bar {
