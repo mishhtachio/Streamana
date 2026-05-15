@@ -21,431 +21,196 @@ function App() {
   const [messages, setMessages] = useState([]);
   const [messageInput, setMessageInput] = useState("");
 
+  const [clock, setClock] = useState("");
+
   const videoRef = useRef(null);
-
   const youtubePlayerRef = useRef(null);
-
   const embedPlayerRef = useRef(null);
-
   const isRemoteAction = useRef(false);
-
   const pendingSyncState = useRef(null);
-  const youtubeTimeTracker = useRef({
-    time: 0,
-    checkedAt: Date.now(),
-  });
+  const youtubeTimeTracker = useRef({ time: 0, checkedAt: Date.now() });
   const lastControlEmitAt = useRef(0);
+  const messagesEndRef = useRef(null);
+
+  // Live clock
+  useEffect(() => {
+    const tick = () => {
+      const now = new Date();
+      setClock(now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Auto-scroll chat
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   const isEmbedVideo =
-    activeVideo.includes("/embed/") ||
-    activeVideo.includes("embed");
+    activeVideo.includes("/embed/") || activeVideo.includes("embed");
 
   const getYoutubeVideoId = (url) => {
     if (!url) return null;
-
     try {
-
       const parsedUrl = new URL(url);
-
-      // youtu.be short links
-      if (
-        parsedUrl.hostname === "youtu.be"
-      ) {
-        return parsedUrl.pathname.slice(1);
-      }
-
-      // youtube.com/watch?v=
-      if (
-        parsedUrl.searchParams.get("v")
-      ) {
-        return parsedUrl.searchParams.get("v");
-      }
-
-      // youtube.com/embed/
-      if (
-        parsedUrl.pathname.includes("/embed/")
-      ) {
-        return parsedUrl.pathname.split("/embed/")[1];
-      }
-
-      // youtube shorts
-      if (
-        parsedUrl.pathname.includes("/shorts/")
-      ) {
-        return parsedUrl.pathname.split("/shorts/")[1];
-      }
-
+      if (parsedUrl.hostname === "youtu.be") return parsedUrl.pathname.slice(1);
+      if (parsedUrl.searchParams.get("v")) return parsedUrl.searchParams.get("v");
+      if (parsedUrl.pathname.includes("/embed/")) return parsedUrl.pathname.split("/embed/")[1];
+      if (parsedUrl.pathname.includes("/shorts/")) return parsedUrl.pathname.split("/shorts/")[1];
       return null;
-
     } catch {
-
       return null;
-
     }
-
   };
 
-  const isYoutubeVideo =
-    getYoutubeVideoId(activeVideo) !== null;
+  const isYoutubeVideo = getYoutubeVideoId(activeVideo) !== null;
 
   const suppressLocalEvents = () => {
-
     isRemoteAction.current = true;
-
-    window.clearTimeout(
-      suppressLocalEvents.timeoutId
-    );
-
-    suppressLocalEvents.timeoutId =
-      window.setTimeout(() => {
-        isRemoteAction.current = false;
-      }, 700);
-
+    window.clearTimeout(suppressLocalEvents.timeoutId);
+    suppressLocalEvents.timeoutId = window.setTimeout(() => {
+      isRemoteAction.current = false;
+    }, 700);
   };
 
   const canEmitControl = () => {
-
     const now = Date.now();
-
-    if (now - lastControlEmitAt.current < 250) {
-      return false;
-    }
-
+    if (now - lastControlEmitAt.current < 250) return false;
     lastControlEmitAt.current = now;
     return true;
-
   };
 
   const getCurrentTime = () => {
-
-    if (isYoutubeVideo && youtubePlayerRef.current) {
-      return youtubePlayerRef.current.getCurrentTime();
-    }
-
-    if (videoRef.current) {
-      return videoRef.current.currentTime;
-    }
-
+    if (isYoutubeVideo && youtubePlayerRef.current) return youtubePlayerRef.current.getCurrentTime();
+    if (videoRef.current) return videoRef.current.currentTime;
     return 0;
-
   };
 
-  const emitPlaybackControl = (
-    type,
-    currentTime = getCurrentTime()
-  ) => {
-
+  const emitPlaybackControl = (type, currentTime = getCurrentTime()) => {
     if (!joinedRoom || isRemoteAction.current) return;
     if (!canEmitControl()) return;
-
-    socket.emit(type, {
-      roomId: joinedRoom,
-      currentTime,
-    });
-
+    socket.emit(type, { roomId: joinedRoom, currentTime });
   };
 
-  const applySyncState = ({
-    currentTime,
-    isPlaying,
-  }) => {
-
+  const applySyncState = ({ currentTime, isPlaying }) => {
     suppressLocalEvents();
 
     if (isEmbedVideo) {
-      // If embed iframe isn't ready yet, keep pending state
       if (!embedPlayerRef.current || !embedPlayerRef.current.contentWindow) {
         pendingSyncState.current = { currentTime, isPlaying };
         return false;
       }
-
-      // Send postMessage commands to the embed player
       try {
-        embedPlayerRef.current.contentWindow.postMessage(
-          { type: "PLAYER_SEEK", currentTime },
-          "*"
-        );
-
-        embedPlayerRef.current.contentWindow.postMessage(
-          { type: isPlaying ? "PLAYER_PLAY" : "PLAYER_PAUSE" },
-          "*"
-        );
-      } catch (e) {
-        // ignore postMessage failures
-      }
-
+        embedPlayerRef.current.contentWindow.postMessage({ type: "PLAYER_SEEK", currentTime }, "*");
+        embedPlayerRef.current.contentWindow.postMessage({ type: isPlaying ? "PLAYER_PLAY" : "PLAYER_PAUSE" }, "*");
+      } catch (e) {}
       pendingSyncState.current = null;
       return true;
     }
 
     if (isYoutubeVideo) {
-
       if (!youtubePlayerRef.current) return false;
-
-      youtubePlayerRef.current.seekTo(
-        currentTime,
-        true
-      );
-
-      youtubeTimeTracker.current = {
-        time: currentTime,
-        checkedAt: Date.now(),
-      };
-
-      if (isPlaying) {
-        youtubePlayerRef.current.playVideo();
-      } else {
-        youtubePlayerRef.current.pauseVideo();
-      }
-
+      youtubePlayerRef.current.seekTo(currentTime, true);
+      youtubeTimeTracker.current = { time: currentTime, checkedAt: Date.now() };
+      if (isPlaying) youtubePlayerRef.current.playVideo();
+      else youtubePlayerRef.current.pauseVideo();
       return true;
-
     }
 
     if (!videoRef.current) return false;
     if (videoRef.current.readyState < 1) return false;
-
     videoRef.current.currentTime = currentTime;
-
-    if (isPlaying) {
-      videoRef.current.play().catch(() => {});
-    } else {
-      videoRef.current.pause();
-    }
-
+    if (isPlaying) videoRef.current.play().catch(() => {});
+    else videoRef.current.pause();
     return true;
-
   };
 
   useEffect(() => {
-
     const queueSyncState = (syncState) => {
-
       if (!syncState) return;
-
       setActiveVideo(syncState.videoUrl);
-
-      const latencySeconds =
-        syncState.isPlaying && syncState.sentAt
-          ? (Date.now() - syncState.sentAt) / 1000
-          : 0;
-
+      const latencySeconds = syncState.isPlaying && syncState.sentAt
+        ? (Date.now() - syncState.sentAt) / 1000 : 0;
       pendingSyncState.current = {
-        currentTime:
-          (syncState.currentTime || 0) + latencySeconds,
+        currentTime: (syncState.currentTime || 0) + latencySeconds,
         isPlaying: Boolean(syncState.isPlaying),
       };
-
-      if (videoRef.current) {
-        videoRef.current.load();
-      }
-
+      if (videoRef.current) videoRef.current.load();
       if (syncState.videoUrl === activeVideo) {
-        if (applySyncState(pendingSyncState.current)) {
-          pendingSyncState.current = null;
-        }
+        if (applySyncState(pendingSyncState.current)) pendingSyncState.current = null;
       }
-
     };
 
-    socket.on("joined-room", ({
-      roomId,
-      users,
-      state,
-    }) => {
-
+    socket.on("joined-room", ({ roomId, users, state }) => {
       setJoinedRoom(roomId);
       setRoomUsers(users || []);
       queueSyncState(state);
-
     });
 
-    socket.on("sync-state", ({
-      currentTime,
-      isPlaying,
-      videoUrl,
-    }) => {
-
-      queueSyncState({
-        currentTime,
-        isPlaying,
-        videoUrl,
-      });
-
+    socket.on("sync-state", ({ currentTime, isPlaying, videoUrl }) => {
+      queueSyncState({ currentTime, isPlaying, videoUrl });
     });
 
-    socket.on("room-users", (users) => {
-      setRoomUsers(users);
-    });
+    socket.on("room-users", (users) => setRoomUsers(users));
 
-    socket.on("receive-message", ({
-      username,
-      message,
-      timestamp,
-    }) => {
-      setMessages((prev) => [...prev, {
-        username,
-        message,
-        timestamp,
-      }]);
+    socket.on("receive-message", ({ username, message, timestamp }) => {
+      setMessages((prev) => [...prev, { username, message, timestamp }]);
     });
 
     return () => {
-
       socket.off("joined-room");
       socket.off("sync-state");
       socket.off("room-users");
       socket.off("receive-message");
-
     };
-
   }, [activeVideo, isEmbedVideo, isYoutubeVideo]);
 
   useEffect(() => {
-
     if (!pendingSyncState.current) return;
-
-    if (applySyncState(pendingSyncState.current)) {
-      pendingSyncState.current = null;
-    }
-
+    if (applySyncState(pendingSyncState.current)) pendingSyncState.current = null;
   }, [activeVideo, isYoutubeVideo]);
 
   useEffect(() => {
-
     if (!joinedRoom || !isYoutubeVideo) return;
-
     const intervalId = window.setInterval(() => {
-
-      if (
-        !youtubePlayerRef.current ||
-        isRemoteAction.current
-      ) {
-        return;
-      }
-
-      const currentTime =
-        youtubePlayerRef.current.getCurrentTime();
-
-      const playerState =
-        youtubePlayerRef.current.getPlayerState?.();
-
+      if (!youtubePlayerRef.current || isRemoteAction.current) return;
+      const currentTime = youtubePlayerRef.current.getCurrentTime();
+      const playerState = youtubePlayerRef.current.getPlayerState?.();
       const isPlaying = playerState === 1;
       const now = Date.now();
       const previous = youtubeTimeTracker.current;
       const elapsed = (now - previous.checkedAt) / 1000;
       const expectedDelta = isPlaying ? elapsed : 0;
       const actualDelta = currentTime - previous.time;
-
-      if (
-        Math.abs(actualDelta - expectedDelta) > 1.75
-      ) {
-        emitPlaybackControl("seek", currentTime);
-      }
-
-      youtubeTimeTracker.current = {
-        time: currentTime,
-        checkedAt: now,
-      };
-
+      if (Math.abs(actualDelta - expectedDelta) > 1.75) emitPlaybackControl("seek", currentTime);
+      youtubeTimeTracker.current = { time: currentTime, checkedAt: now };
     }, 700);
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
-
+    return () => window.clearInterval(intervalId);
   }, [joinedRoom, isYoutubeVideo]);
 
-  const playMedia = () => {
-
-    if (isYoutubeVideo && youtubePlayerRef.current) {
-      youtubePlayerRef.current.playVideo();
-    } else if (videoRef.current) {
-      videoRef.current.play().catch(() => {});
-    }
-
-    emitPlaybackControl("play");
-
-  };
-
-  const pauseMedia = () => {
-
-    if (isYoutubeVideo && youtubePlayerRef.current) {
-      youtubePlayerRef.current.pauseVideo();
-    } else if (videoRef.current) {
-      videoRef.current.pause();
-    }
-
-    emitPlaybackControl("pause");
-
-  };
-
-  const seekMediaBy = (seconds) => {
-
-    const nextTime = Math.max(
-      0,
-      getCurrentTime() + seconds
-    );
-
-    if (isYoutubeVideo && youtubePlayerRef.current) {
-      youtubePlayerRef.current.seekTo(
-        nextTime,
-        true
-      );
-    } else if (videoRef.current) {
-      videoRef.current.currentTime = nextTime;
-    }
-
-    emitPlaybackControl("seek", nextTime);
-
-  };
-
   const continueToRoom = () => {
-
     if (!username.trim()) return;
-
     setUsername(username.trim());
     setHasUsername(true);
-
   };
 
   const joinRoom = () => {
-
     if (!roomId.trim() || !username.trim()) return;
-
-    const nextRoomId = roomId.trim();
-
-    socket.emit("join-room", {
-      roomId: nextRoomId,
-      username: username.trim(),
-    });
-
+    socket.emit("join-room", { roomId: roomId.trim(), username: username.trim() });
   };
 
   const loadVideo = () => {
-
     if (!videoUrl) return;
-
     setActiveVideo(videoUrl);
-
-    socket.emit("change-video", {
-      roomId: joinedRoom,
-      videoUrl,
-    });
-
+    socket.emit("change-video", { roomId: joinedRoom, videoUrl });
   };
 
   const sendMessage = () => {
-
     if (!messageInput.trim() || !joinedRoom) return;
-
-    socket.emit("send-message", {
-      roomId: joinedRoom,
-      message: messageInput.trim(),
-    });
-
+    socket.emit("send-message", { roomId: joinedRoom, message: messageInput.trim() });
     setMessageInput("");
-
   };
 
   const goBack = () => {
@@ -458,265 +223,240 @@ function App() {
   return (
     <div className="desktop">
 
-      {/* ICONS */}
-
+      {/* DESKTOP ICONS */}
       <div className="desktop-icon">
-        🎵
-        <span>Music</span>
+        🖥️<span>My Computer</span>
       </div>
-
       <div className="desktop-icon second">
-        📼
-        <span>Movies</span>
+        🗑️<span>Recycle Bin</span>
+      </div>
+      <div className="desktop-icon third">
+        📁<span>My Documents</span>
+      </div>
+      <div className="desktop-icon fourth">
+        🎵<span>My Music</span>
       </div>
 
       {/* MAIN WINDOW */}
-
       <div className="window">
 
         {/* TITLE BAR */}
-
         <div className="title-bar">
-
           <div className="title-left">
-            💿 Streamana.exe
+            <span className="title-icon">💿</span>
+            Streamana — {joinedRoom ? `Room: ${joinedRoom}` : "Sign In"}
           </div>
-
           {joinedRoom ? (
             <div className="back-buttons">
               <button onClick={goBack}>← Back</button>
             </div>
           ) : (
             <div className="window-buttons">
-              <button>—</button>
-              <button>□</button>
-              <button>✕</button>
+              <button title="Minimize">—</button>
+              <button title="Maximize">□</button>
+              <button title="Close">✕</button>
             </div>
           )}
-
         </div>
 
-        {/* MENU */}
-
+        {/* MENU BAR */}
         <div className="menu-bar">
-          File Edit View Favorites Help
+          <span>File</span>
+          <span>Edit</span>
+          <span>Actions</span>
+          <span>Tools</span>
+          <span>Help</span>
         </div>
+
+        {/* TOOLBAR */}
+        {joinedRoom && (
+          <div className="toolbar">
+            <button className="toolbar-btn">
+              <span className="tb-icon">👤</span>Invite
+            </button>
+            <button className="toolbar-btn">
+              <span className="tb-icon">📁</span>Send Files
+            </button>
+            <div className="toolbar-sep" />
+            <button className="toolbar-btn">
+              <span className="tb-icon">🎬</span>Video
+            </button>
+            <button className="toolbar-btn">
+              <span className="tb-icon">🎙️</span>Voice
+            </button>
+            <div className="toolbar-sep" />
+            <button className="toolbar-btn">
+              <span className="tb-icon">🎮</span>Games
+            </button>
+          </div>
+        )}
 
         {/* CONTENT */}
-
         <div className="window-content">
 
           {!joinedRoom ? (
 
+            /* ── JOIN SCREEN ── */
             <div className="join-screen">
 
               <div className="big-logo">
-                STREAMANA 95
+                <div className="logo-text">Streamana XP</div>
               </div>
 
               <div className="join-panel">
-
-                {!hasUsername ? (
-
-                  <>
-
-                    <div className="field-label">
-                      Username:
-                    </div>
-
-                    <input
-                      type="text"
-                      value={username}
-                      onChange={(e) =>
-                        setUsername(e.target.value)
-                      }
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          continueToRoom();
-                        }
-                      }}
-                      className="win95-input"
-                    />
-
-                    <button
-                      className="win95-button"
-                      onClick={continueToRoom}
-                    >
-                      Continue
-                    </button>
-
-                  </>
-
-                ) : (
-
-                  <>
-
-                    <div className="field-label">
-                      Room Name:
-                    </div>
-
-                    <input
-                      type="text"
-                      value={roomId}
-                      onChange={(e) =>
-                        setRoomId(e.target.value)
-                      }
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          joinRoom();
-                        }
-                      }}
-                      className="win95-input"
-                    />
-
-                    <button
-                      className="win95-button"
-                      onClick={joinRoom}
-                    >
-                      Connect
-                    </button>
-
-                  </>
-
-                )}
-
+                <div className="join-panel-header">
+                  <span>💿</span>
+                  {!hasUsername ? "Enter your display name" : "Join a watch room"}
+                </div>
+                <div className="join-panel-body">
+                  {!hasUsername ? (
+                    <>
+                      <div>
+                        <div className="field-label">Display name:</div>
+                        <input
+                          type="text"
+                          value={username}
+                          onChange={(e) => setUsername(e.target.value)}
+                          onKeyDown={(e) => e.key === "Enter" && continueToRoom()}
+                          className="win95-input"
+                          placeholder="e.g. CillBipher"
+                        />
+                      </div>
+                      <button className="win95-button primary" onClick={continueToRoom}>
+                        Sign In →
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <div>
+                        <div className="field-label">Room name:</div>
+                        <input
+                          type="text"
+                          value={roomId}
+                          onChange={(e) => setRoomId(e.target.value)}
+                          onKeyDown={(e) => e.key === "Enter" && joinRoom()}
+                          className="win95-input"
+                          placeholder="Enter room code..."
+                        />
+                      </div>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button className="win95-button" onClick={() => setHasUsername(false)}>
+                          ← Back
+                        </button>
+                        <button className="win95-button primary" style={{ flex: 1 }} onClick={joinRoom}>
+                          Connect to Room
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
 
             </div>
 
           ) : (
 
+            /* ── PLAYER LAYOUT ── */
             <div className="player-layout">
 
-              {/* LEFT PANEL */}
-
+              {/* LEFT SIDEBAR */}
               <div className="sidebar">
 
+                {/* Current Room */}
                 <div className="mini-window">
-
-                  <div className="mini-title">
-                    Current Room
-                  </div>
-
+                  <div className="mini-title">🔗 Current Room</div>
                   <div className="mini-body">
-                    {joinedRoom}
+                    <div className="room-name-display">{joinedRoom}</div>
                   </div>
-
                 </div>
 
+                {/* Users */}
                 <div className="mini-window">
-
-                  <div className="mini-title">
-                    In Room
-                  </div>
-
-                  <div className="mini-body users-list">
-
-                    {roomUsers.map((user) => (
-                      <div
-                        className="user-row"
-                        key={user.id}
-                      >
-                        {user.username}
-                      </div>
-                    ))}
-
-                  </div>
-
-                </div>
-
-                <div className="mini-window">
-
-                  <div className="mini-title">
-                    Load Media
-                  </div>
-
-                  <div className="mini-body">
-
-                    <input
-                      type="text"
-                      placeholder="Paste URL"
-                      value={videoUrl}
-                      onChange={(e) =>
-                        setVideoUrl(e.target.value)
-                      }
-                      className="win95-input"
-                    />
-
-                    <button
-                      className="win95-button"
-                      onClick={loadVideo}
-                    >
-                      Load
-                    </button>
-
-                  </div>
-
-                </div>
-
-                <div className="mini-window">
-
-                  <div className="mini-title">
-                    Chat
-                  </div>
-
-                  <div className="mini-body chat-window">
-
-                    <div className="messages-container">
-                      {messages.map((msg, idx) => (
-                        <div key={idx} className="chat-message">
-                          <span className="chat-username">
-                            {msg.username}:
-                          </span>
-                          <span className="chat-text">
-                            {msg.message}
-                          </span>
+                  <div className="mini-title">👥 In Room</div>
+                  <div className="mini-body" style={{ padding: 0 }}>
+                    <div className="user-section-label">Online ({roomUsers.length})</div>
+                    <div className="users-list">
+                      {roomUsers.map((user) => (
+                        <div className="user-row" key={user.id}>
+                          <div className="user-avatar">👤</div>
+                          <div className="user-status" />
+                          <span>{user.username}</span>
                         </div>
                       ))}
                     </div>
+                  </div>
+                </div>
 
+                {/* Load Media */}
+                <div className="mini-window">
+                  <div className="mini-title">📺 Load Media</div>
+                  <div className="mini-body">
                     <input
                       type="text"
-                      placeholder="Type message..."
-                      value={messageInput}
-                      onChange={(e) =>
-                        setMessageInput(e.target.value)
-                      }
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          sendMessage();
-                        }
-                      }}
-                      className="win95-input chat-input"
+                      placeholder="Paste video URL..."
+                      value={videoUrl}
+                      onChange={(e) => setVideoUrl(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && loadVideo()}
+                      className="win95-input"
                     />
-
-                    <button
-                      className="send-button"
-                      onClick={sendMessage}
-                    >
-                      Send
+                    <button className="win95-button primary" onClick={loadVideo}>
+                      Load ▶
                     </button>
-
                   </div>
+                </div>
 
+                {/* Chat */}
+                <div className="mini-window">
+                  <div className="mini-title">💬 Chat — {joinedRoom}</div>
+                  <div className="mini-body chat-window">
+                    <div className="messages-container">
+                      {messages.length === 0 && (
+                        <div className="chat-italic">No messages yet. Say hi!</div>
+                      )}
+                      {messages.map((msg, idx) => (
+                        <div key={idx} className="chat-message">
+                          <span
+                            className={
+                              "chat-username" +
+                              (msg.username === username ? " self" : "")
+                            }
+                          >
+                            {msg.username}:
+                          </span>
+                          <span className="chat-text"> {msg.message}</span>
+                        </div>
+                      ))}
+                      <div ref={messagesEndRef} />
+                    </div>
+                    <div className="chat-input-row">
+                      <input
+                        type="text"
+                        placeholder="Type a message..."
+                        value={messageInput}
+                        onChange={(e) => setMessageInput(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+                        className="win95-input chat-input"
+                      />
+                      <button className="send-button" onClick={sendMessage}>
+                        Send
+                      </button>
+                    </div>
+                    <div className="last-seen">
+                      Room: {joinedRoom} · {roomUsers.length} online
+                    </div>
+                  </div>
                 </div>
 
               </div>
 
-
-
-              {/* PLAYER */}
-
+              {/* MEDIA PLAYER */}
               <div className="media-window">
-
                 <div className="media-header">
-                  Now Playing
+                  Now Playing:
                 </div>
 
                 <div className="media-body">
-
                   {isEmbedVideo ? (
-
                     <iframe
                       ref={embedPlayerRef}
                       src={activeVideo}
@@ -724,156 +464,62 @@ function App() {
                       frameBorder="0"
                       allowFullScreen
                       onLoad={() => {
-                        // Apply pending sync state when iframe loads
-                        if (
-                          pendingSyncState.current &&
-                          applySyncState(pendingSyncState.current)
-                        ) {
+                        if (pendingSyncState.current && applySyncState(pendingSyncState.current)) {
                           pendingSyncState.current = null;
                         }
                       }}
                     />
-
                   ) : isYoutubeVideo ? (
-
                     <YouTube
-                      videoId={
-                        getYoutubeVideoId(activeVideo)
-                      }
-
+                      videoId={getYoutubeVideoId(activeVideo)}
                       className="youtube-player"
-
-                      opts={{
-                        width: "100%",
-                        height: "100%",
-                        playerVars: {
-                          autoplay: 0,
-                        },
-                      }}
-
+                      opts={{ width: "100%", height: "100%", playerVars: { autoplay: 0 } }}
                       onReady={(event) => {
-                        youtubePlayerRef.current =
-                          event.target;
-
-                        if (
-                          pendingSyncState.current &&
-                          applySyncState(pendingSyncState.current)
-                        ) {
-                          pendingSyncState.current =
-                            null;
+                        youtubePlayerRef.current = event.target;
+                        if (pendingSyncState.current && applySyncState(pendingSyncState.current)) {
+                          pendingSyncState.current = null;
                         }
                       }}
-
-                      onPlay={() => {
-
-                        if (
-                          isRemoteAction.current
-                        ) {
-                          return;
-                        }
-
-                        emitPlaybackControl("play");
-
-                      }}
-
-                      onPause={() => {
-
-                        if (
-                          isRemoteAction.current
-                        ) {
-                          return;
-                        }
-
-                        emitPlaybackControl("pause");
-
-                      }}
-
+                      onPlay={() => { if (!isRemoteAction.current) emitPlaybackControl("play"); }}
+                      onPause={() => { if (!isRemoteAction.current) emitPlaybackControl("pause"); }}
                       onError={(err) => {
-                        console.log(
-                          "Youtube Player Error:",
-                          err
-                        );
-
-                        alert(
-                          "This YouTube video cannot be embedded."
-                        );
+                        console.log("Youtube Player Error:", err);
+                        alert("This YouTube video cannot be embedded.");
                       }}
-
                     />
-
                   ) : (
-
                     <video
                       ref={videoRef}
                       className="retro-video"
                       controls
-
-                      onPlay={() => {
-
-                        if (
-                          isRemoteAction.current
-                        ) {
-                          return;
-                        }
-
-                        emitPlaybackControl("play");
-
-                      }}
-
-                      onPause={() => {
-
-                        if (
-                          isRemoteAction.current
-                        ) {
-                          return;
-                        }
-
-                        emitPlaybackControl("pause");
-
-                      }}
-
+                      onPlay={() => { if (!isRemoteAction.current) emitPlaybackControl("play"); }}
+                      onPause={() => { if (!isRemoteAction.current) emitPlaybackControl("pause"); }}
                       onSeeked={() => {
-
-                        if (
-                          isRemoteAction.current
-                        ) {
-                          return;
-                        }
-
-                        emitPlaybackControl(
-                          "seek",
-                          videoRef.current.currentTime
-                        );
-
+                        if (!isRemoteAction.current) emitPlaybackControl("seek", videoRef.current.currentTime);
                       }}
-
                       onLoadedMetadata={() => {
-
-                        if (
-                          pendingSyncState.current &&
-                          applySyncState(pendingSyncState.current)
-                        ) {
-                          pendingSyncState.current =
-                            null;
+                        if (pendingSyncState.current && applySyncState(pendingSyncState.current)) {
+                          pendingSyncState.current = null;
                         }
-
                       }}
-
                     >
-                      <source
-                        src={activeVideo}
-                        type="video/mp4"
-                      />
+                      <source src={activeVideo} type="video/mp4" />
                     </video>
-
                   )}
-
                 </div>
 
                 <div className="status-bar">
-                  {username} connected to room :: {joinedRoom}
+                  <div className="status-segment">
+                    <div className="status-dot" />
+                    {username} connected
+                  </div>
+                  <div className="status-segment">
+                    Room :: {joinedRoom}
+                  </div>
+                  <div className="status-segment">
+                    {roomUsers.length} user{roomUsers.length !== 1 ? "s" : ""} watching
+                  </div>
                 </div>
-
               </div>
 
             </div>
@@ -881,29 +527,32 @@ function App() {
           )}
 
         </div>
-
       </div>
 
       {/* TASKBAR */}
-
       <div className="taskbar">
-
         <button className="start-button">
-          🪟 Start
+          🪟 start
         </button>
-
+        <div className="taskbar-sep" />
         <div className="taskbar-app">
-          Streamana
+          💿 Streamana
         </div>
-
-        <div className="clock">
-          9:41 PM
+        {joinedRoom && (
+          <div className="taskbar-app">
+            💬 {username} — Conversation
+          </div>
+        )}
+        <div className="system-tray">
+          <span className="tray-icon" title="Network">🌐</span>
+          <span className="tray-icon" title="Volume">🔊</span>
+          <span className="tray-icon" title="MSN">💬</span>
+          <div className="clock">{clock}</div>
         </div>
-
       </div>
 
     </div>
   );
-} // safe safe
+}
 
 export default App;
