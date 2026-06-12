@@ -28,7 +28,7 @@ function App() {
   const embedPlayerRef = useRef(null);
   const isRemoteAction = useRef(false);
   const pendingSyncState = useRef(null);
-  const youtubeTimeTracker = useRef({ time: 0, checkedAt: Date.now() });
+  const youtubeTimeTracker = useRef({ time: 0, checkedAt: 0 });
   const lastControlEmitAt = useRef(0);
   const messagesEndRef = useRef(null);
 
@@ -105,7 +105,9 @@ function App() {
       try {
         embedPlayerRef.current.contentWindow.postMessage({ type: "PLAYER_SEEK", currentTime }, "*");
         embedPlayerRef.current.contentWindow.postMessage({ type: isPlaying ? "PLAYER_PLAY" : "PLAYER_PAUSE" }, "*");
-      } catch (e) {}
+      } catch {
+        // Ignore iframe communication errors
+      }
       pendingSyncState.current = null;
       return true;
     }
@@ -174,6 +176,10 @@ function App() {
 
   useEffect(() => {
     if (!joinedRoom || !isYoutubeVideo) return;
+    youtubeTimeTracker.current = {
+      time: youtubePlayerRef.current?.getCurrentTime() || 0,
+      checkedAt: Date.now(),
+    };
     const intervalId = window.setInterval(() => {
       if (!youtubePlayerRef.current || isRemoteAction.current) return;
       const currentTime = youtubePlayerRef.current.getCurrentTime();
