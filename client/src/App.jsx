@@ -30,6 +30,7 @@ function App() {
   const pendingSyncState = useRef(null);
   const youtubeTimeTracker = useRef({ time: 0, checkedAt: 0 });
   const lastControlEmitAt = useRef(0);
+  const lastRemoteSyncTarget = useRef(null);
   const messagesEndRef = useRef(null);
 
   // Live clock
@@ -48,8 +49,18 @@ function App() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  const isValidHttpUrl = (url) => {
+    try {
+      const parsed = new URL(url);
+      return parsed.protocol === "https:" || parsed.protocol === "http:";
+    } catch {
+      return false;
+    }
+  };
+
   const isEmbedVideo =
-    activeVideo.includes("/embed/") || activeVideo.includes("embed");
+    isValidHttpUrl(activeVideo) &&
+    (activeVideo.includes("/embed/") || activeVideo.includes("embed"));
 
   const getYoutubeVideoId = (url) => {
     if (!url) return null;
@@ -91,11 +102,25 @@ function App() {
   const emitPlaybackControl = (type, currentTime = getCurrentTime()) => {
     if (!joinedRoom || isRemoteAction.current) return;
     if (!canEmitControl()) return;
+
+    // Prevent feedback loops: ignore events that match a recent remote sync target (Issue #5)
+    const target = lastRemoteSyncTarget.current;
+    if (target && Date.now() - target.setAt < 3000) {
+      const timeDiff = Math.abs(currentTime - target.currentTime);
+      if (timeDiff < 2) {
+        if (type === "play" && target.isPlaying) return;
+        if (type === "pause" && !target.isPlaying) return;
+        if (type === "seek") return;
+      }
+    }
+
+    lastRemoteSyncTarget.current = null;
     socket.emit(type, { roomId: joinedRoom, currentTime });
   };
 
   const applySyncState = ({ currentTime, isPlaying }) => {
     suppressLocalEvents();
+    lastRemoteSyncTarget.current = { currentTime, isPlaying, setAt: Date.now() };
 
     if (isEmbedVideo) {
       if (!embedPlayerRef.current || !embedPlayerRef.current.contentWindow) {
@@ -209,6 +234,10 @@ function App() {
 
   const loadVideo = () => {
     if (!videoUrl) return;
+    if (!isValidHttpUrl(videoUrl)) {
+      alert("Please enter a valid http:// or https:// URL.");
+      return;
+    }
     setActiveVideo(videoUrl);
     socket.emit("change-video", { roomId: joinedRoom, videoUrl });
   };
@@ -220,6 +249,9 @@ function App() {
   };
 
   const goBack = () => {
+    if (joinedRoom) {
+      socket.emit("leave-room", { roomId: joinedRoom });
+    }
     setJoinedRoom("");
     setRoomUsers([]);
     setMessages([]);
@@ -469,6 +501,7 @@ function App() {
                       className="embed-player"
                       frameBorder="0"
                       allowFullScreen
+                      sandbox="allow-scripts allow-same-origin allow-presentation"
                       onLoad={() => {
                         if (pendingSyncState.current && applySyncState(pendingSyncState.current)) {
                           pendingSyncState.current = null;

@@ -24,11 +24,97 @@ server.listen(PORT, () => {
 
 
 // Track which rooms each user is in
-const userRooms = {};
-const userNames = {};
-const roomUsers = {};
+// Use Object.create(null) to prevent prototype pollution (Issue #3)
+const userRooms = Object.create(null);
+const userNames = Object.create(null);
+const roomUsers = Object.create(null);
 // Track playback state for each room
-const roomStates = {};
+const roomStates = Object.create(null);
+
+// --- Validation Helpers (Issue #1) ---
+
+const DANGEROUS_KEYS = new Set([
+  "__proto__", "constructor", "prototype",
+  "toString", "valueOf", "hasOwnProperty",
+]);
+
+const isValidRoomId = (roomId) => {
+  if (typeof roomId !== "string") return false;
+  const trimmed = roomId.trim();
+  if (!trimmed || trimmed.length > 100) return false;
+  if (DANGEROUS_KEYS.has(trimmed)) return false;
+  return true;
+};
+
+const isValidString = (str, maxLength = 500) => {
+  return typeof str === "string" &&
+    str.trim().length > 0 &&
+    str.length <= maxLength;
+};
+
+const isValidNumber = (num) => {
+  return typeof num === "number" &&
+    Number.isFinite(num) &&
+    num >= 0;
+};
+
+const isValidVideoUrl = (url) => {
+  if (typeof url !== "string" || !url.trim()) return false;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" || parsed.protocol === "http:";
+  } catch {
+    return false;
+  }
+};
+
+// Wraps every socket handler so a malformed payload can never crash the server (Issue #1)
+const safeHandler = (handler) => (...args) => {
+  try {
+    handler(...args);
+  } catch (err) {
+    console.error("Socket handler error:", err.message);
+  }
+};
+
+// --- Rate Limiting (Issue #7) ---
+
+const RATE_LIMITS = {
+  "send-message": { windowMs: 1000, max: 3 },
+  "change-video": { windowMs: 5000, max: 2 },
+  "play":         { windowMs: 500,  max: 3 },
+  "pause":        { windowMs: 500,  max: 3 },
+  "seek":         { windowMs: 500,  max: 5 },
+};
+
+const rateLimitState = Object.create(null);
+
+const checkRateLimit = (socketId, eventName) => {
+  const config = RATE_LIMITS[eventName];
+  if (!config) return true;
+
+  const key = `${socketId}:${eventName}`;
+  const now = Date.now();
+
+  if (!rateLimitState[key]) {
+    rateLimitState[key] = { timestamps: [now] };
+    return true;
+  }
+
+  const state = rateLimitState[key];
+  state.timestamps = state.timestamps.filter(
+    (t) => now - t < config.windowMs
+  );
+
+  if (state.timestamps.length >= config.max) {
+    return false;
+  }
+
+  state.timestamps.push(now);
+  return true;
+};
+
+// --- Room Helpers ---
 
 const getRoomUsers = (roomId) =>
   Object.entries(roomUsers[roomId] || {}).map(([
@@ -66,45 +152,81 @@ const getRoomState = (roomId) => {
   };
 };
 
+// Centralised room-leave logic used by leave-room, join-room, and disconnect (Issue #2)
+const leaveRoom = (socket, roomId) => {
+  socket.leave(roomId);
+
+  if (roomUsers[roomId]) {
+    delete roomUsers[roomId][socket.id];
+  }
+
+  const room = io.sockets.adapter.rooms.get(roomId);
+  const remainingUsers =
+    room && room.has(socket.id)
+      ? room.size - 1
+      : room?.size || 0;
+
+  if (remainingUsers === 0) {
+    delete roomStates[roomId];
+    delete roomUsers[roomId];
+  } else {
+    broadcastRoomUsers(roomId);
+  }
+};
+
+const leaveAllRooms = (socket) => {
+  if (userRooms[socket.id]) {
+    userRooms[socket.id].forEach((roomId) => {
+      leaveRoom(socket, roomId);
+    });
+    delete userRooms[socket.id];
+  }
+};
+
+// --- Socket Connection ---
+
 io.on("connection", (socket) => {
 
   console.log("User connected:", socket.id);
 
   // JOIN ROOM
 
-  socket.on("join-room", (joinData) => {
+  socket.on("join-room", safeHandler((joinData) => {
+
+    if (!joinData) return;
 
     const roomId =
       typeof joinData === "string"
         ? joinData.trim()
-        : joinData.roomId.trim();
+        : (joinData.roomId
+            ? String(joinData.roomId).trim()
+            : "");
 
     const username =
       typeof joinData === "string"
         ? socket.id
-        : joinData.username.trim();
+        : (joinData.username
+            ? String(joinData.username).trim()
+            : socket.id);
 
-    if (!roomId) return;
+    if (!isValidRoomId(roomId)) return;
+
+    // Leave all previously joined rooms before joining a new one (Issue #2)
+    leaveAllRooms(socket);
 
     userNames[socket.id] = username || socket.id;
 
     socket.join(roomId);
 
     if (!roomUsers[roomId]) {
-      roomUsers[roomId] = {};
+      roomUsers[roomId] = Object.create(null);
     }
 
     roomUsers[roomId][socket.id] =
       userNames[socket.id];
 
-    // Track user's rooms
-    if (!userRooms[socket.id]) {
-      userRooms[socket.id] = [];
-    }
-
-    if (!userRooms[socket.id].includes(roomId)) {
-      userRooms[socket.id].push(roomId);
-    }
+    // Track user's rooms (single room at a time now)
+    userRooms[socket.id] = [roomId];
 
     console.log(
       `${userNames[socket.id]} joined room ${roomId}`
@@ -132,14 +254,50 @@ io.on("connection", (socket) => {
 
     broadcastRoomUsers(roomId);
 
-  });
+  }));
+
+  // LEAVE ROOM (Issue #2 — explicit leave event)
+
+  socket.on("leave-room", safeHandler((data) => {
+
+    if (!data) return;
+
+    const roomId =
+      typeof data === "string"
+        ? data.trim()
+        : (data.roomId
+            ? String(data.roomId).trim()
+            : "");
+
+    if (!isValidRoomId(roomId)) return;
+
+    console.log(
+      `${userNames[socket.id] || socket.id} left room ${roomId}`
+    );
+
+    leaveRoom(socket, roomId);
+
+    if (userRooms[socket.id]) {
+      userRooms[socket.id] = userRooms[socket.id].filter(
+        (r) => r !== roomId
+      );
+      if (userRooms[socket.id].length === 0) {
+        delete userRooms[socket.id];
+      }
+    }
+
+  }));
 
   // PLAY
 
-  socket.on("play", ({
-    roomId,
-    currentTime,
-  }) => {
+  socket.on("play", safeHandler((data) => {
+
+    if (!data || typeof data !== "object") return;
+    const { roomId, currentTime } = data;
+
+    if (!isValidRoomId(roomId)) return;
+    if (!isValidNumber(currentTime)) return;
+    if (!checkRateLimit(socket.id, "play")) return;
 
     console.log(
       `${socket.id} played video in ${roomId}`
@@ -158,14 +316,18 @@ io.on("connection", (socket) => {
       getRoomState(roomId)
     );
 
-  });
+  }));
 
   // PAUSE
 
-  socket.on("pause", ({
-    roomId,
-    currentTime,
-  }) => {
+  socket.on("pause", safeHandler((data) => {
+
+    if (!data || typeof data !== "object") return;
+    const { roomId, currentTime } = data;
+
+    if (!isValidRoomId(roomId)) return;
+    if (!isValidNumber(currentTime)) return;
+    if (!checkRateLimit(socket.id, "pause")) return;
 
     console.log(
       `${socket.id} paused video in ${roomId}`
@@ -184,14 +346,18 @@ io.on("connection", (socket) => {
       getRoomState(roomId)
     );
 
-  });
+  }));
 
   // SEEK
 
-  socket.on("seek", ({
-    roomId,
-    currentTime,
-  }) => {
+  socket.on("seek", safeHandler((data) => {
+
+    if (!data || typeof data !== "object") return;
+    const { roomId, currentTime } = data;
+
+    if (!isValidRoomId(roomId)) return;
+    if (!isValidNumber(currentTime)) return;
+    if (!checkRateLimit(socket.id, "seek")) return;
 
     console.log(
       `${socket.id} seeked video in ${roomId}`
@@ -212,14 +378,18 @@ io.on("connection", (socket) => {
       getRoomState(roomId)
     );
 
-  });
+  }));
 
   // CHANGE VIDEO
 
-  socket.on("change-video", ({
-    roomId,
-    videoUrl,
-  }) => {
+  socket.on("change-video", safeHandler((data) => {
+
+    if (!data || typeof data !== "object") return;
+    const { roomId, videoUrl } = data;
+
+    if (!isValidRoomId(roomId)) return;
+    if (!isValidVideoUrl(videoUrl)) return;
+    if (!checkRateLimit(socket.id, "change-video")) return;
 
     console.log(
       `${socket.id} changed video in ${roomId}`
@@ -238,16 +408,18 @@ io.on("connection", (socket) => {
       getRoomState(roomId)
     );
 
-  });
+  }));
 
   // SEND MESSAGE
 
-  socket.on("send-message", ({
-    roomId,
-    message,
-  }) => {
+  socket.on("send-message", safeHandler((data) => {
 
-    if (!message || !message.trim() || !roomId) return;
+    if (!data || typeof data !== "object") return;
+    const { roomId, message } = data;
+
+    if (!isValidRoomId(roomId)) return;
+    if (!isValidString(message, 2000)) return;
+    if (!checkRateLimit(socket.id, "send-message")) return;
 
     const username = userNames[socket.id] || "Anonymous";
 
@@ -261,13 +433,16 @@ io.on("connection", (socket) => {
       timestamp: Date.now(),
     });
 
-  });
+  }));
 
   // REQUEST SYNC
 
-  socket.on("request-sync", ({
-    roomId,
-  }) => {
+  socket.on("request-sync", safeHandler((data) => {
+
+    if (!data || typeof data !== "object") return;
+    const { roomId } = data;
+
+    if (!isValidRoomId(roomId)) return;
 
     console.log(
       `${socket.id} requested sync in ${roomId}`
@@ -277,16 +452,16 @@ io.on("connection", (socket) => {
       requesterId: socket.id,
     });
 
-  });
+  }));
 
   // SEND SYNC STATE
 
-  socket.on("sync-state", ({
-    requesterId,
-    currentTime,
-    isPlaying,
-    videoUrl,
-  }) => {
+  socket.on("sync-state", safeHandler((data) => {
+
+    if (!data || typeof data !== "object") return;
+    const { requesterId, currentTime, isPlaying, videoUrl } = data;
+
+    if (!requesterId || typeof requesterId !== "string") return;
 
     io.to(requesterId).emit("sync-state", {
       currentTime,
@@ -294,7 +469,7 @@ io.on("connection", (socket) => {
       videoUrl,
     });
 
-  });
+  }));
 
   // DISCONNECT
 
@@ -306,29 +481,16 @@ io.on("connection", (socket) => {
     );
 
     // Clean up user's rooms
-    if (userRooms[socket.id]) {
-      userRooms[socket.id].forEach((roomId) => {
-        if (roomUsers[roomId]) {
-          delete roomUsers[roomId][socket.id];
-        }
-
-        const room = io.sockets.adapter.rooms.get(roomId);
-        const remainingUsers =
-          room && room.has(socket.id)
-            ? room.size - 1
-            : room?.size || 0;
-
-        if (remainingUsers === 0) {
-          delete roomStates[roomId];
-          delete roomUsers[roomId];
-        } else {
-          broadcastRoomUsers(roomId);
-        }
-      });
-      delete userRooms[socket.id];
-    }
+    leaveAllRooms(socket);
 
     delete userNames[socket.id];
+
+    // Clean up rate limit state for this socket
+    for (const key of Object.keys(rateLimitState)) {
+      if (key.startsWith(socket.id + ":")) {
+        delete rateLimitState[key];
+      }
+    }
 
   }); //safe safe
 
