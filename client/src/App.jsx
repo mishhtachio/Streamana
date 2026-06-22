@@ -604,7 +604,7 @@ function App() {
                       key={getYoutubeVideoId(activeVideo)}
                       videoId={getYoutubeVideoId(activeVideo)}
                       className="youtube-player"
-                      opts={{ width: "100%", height: "100%", playerVars: { autoplay: 0, origin: window.location.origin } }}
+                      opts={{ width: "100%", height: "100%", playerVars: { autoplay: 0 } }}
                       onReady={(event) => {
                         youtubePlayerRef.current = event.target;
                         if (pendingSyncState.current && applySyncState(pendingSyncState.current)) {
