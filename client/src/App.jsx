@@ -1,12 +1,61 @@
-import { useEffect, useRef, useState } from "react";
+import { Component, useEffect, useRef, useState } from "react";
 import YouTube from "react-youtube";
 import { socket } from "./socket";
 import "./App.css";
 
+// Error Boundary to prevent blank blue-screen crashes
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, info) {
+    console.error("Streamana crashed:", error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="desktop">
+          <div className="window" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+            <div className="title-bar" style={{ width: "100%" }}>
+              <div className="title-left">
+                <span className="title-icon">💿</span>
+                Streamana — Error
+              </div>
+            </div>
+            <div style={{ padding: 40, textAlign: "center", fontFamily: "Tahoma, sans-serif" }}>
+              <div style={{ fontSize: 48, marginBottom: 16 }}>😵</div>
+              <h2 style={{ margin: "0 0 8px", color: "#1a4ab8" }}>Something went wrong</h2>
+              <p style={{ color: "#666", marginBottom: 20 }}>{this.state.error?.message || "An unexpected error occurred."}</p>
+              <button
+                className="win95-button primary"
+                onClick={() => {
+                  this.setState({ hasError: false, error: null });
+                  window.location.reload();
+                }}
+              >
+                Restart Streamana
+              </button>
+            </div>
+          </div>
+          <div className="taskbar">
+            <button className="start-button">🪟 start</button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 function App() {
 
-  const [username, setUsername] = useState("");
-  const [hasUsername, setHasUsername] = useState(false);
+  // Restore session from sessionStorage so page reload keeps you in the room
+  const [username, setUsername] = useState(() => sessionStorage.getItem("streamana-username") || "");
+  const [hasUsername, setHasUsername] = useState(() => Boolean(sessionStorage.getItem("streamana-username")));
 
   const [roomId, setRoomId] = useState("");
   const [joinedRoom, setJoinedRoom] = useState("");
@@ -66,11 +115,16 @@ function App() {
     if (!url) return null;
     try {
       const parsedUrl = new URL(url);
-      if (parsedUrl.hostname === "youtu.be") return parsedUrl.pathname.slice(1);
-      if (parsedUrl.searchParams.get("v")) return parsedUrl.searchParams.get("v");
-      if (parsedUrl.pathname.includes("/embed/")) return parsedUrl.pathname.split("/embed/")[1];
-      if (parsedUrl.pathname.includes("/shorts/")) return parsedUrl.pathname.split("/shorts/")[1];
-      return null;
+      const hostname = parsedUrl.hostname.replace(/^www\./, "");
+      if (hostname !== "youtube.com" && hostname !== "youtu.be" && hostname !== "m.youtube.com") return null;
+      let videoId = null;
+      if (hostname === "youtu.be") videoId = parsedUrl.pathname.slice(1);
+      else if (parsedUrl.searchParams.get("v")) videoId = parsedUrl.searchParams.get("v");
+      else if (parsedUrl.pathname.includes("/embed/")) videoId = parsedUrl.pathname.split("/embed/")[1];
+      else if (parsedUrl.pathname.includes("/shorts/")) videoId = parsedUrl.pathname.split("/shorts/")[1];
+      // Strip any trailing path segments or slashes from the extracted ID
+      if (videoId) videoId = videoId.split("/")[0].split("?")[0];
+      return videoId || null;
     } catch {
       return null;
     }
@@ -157,7 +211,10 @@ function App() {
   useEffect(() => {
     const queueSyncState = (syncState) => {
       if (!syncState) return;
-      setActiveVideo(syncState.videoUrl);
+      // Guard against undefined/null videoUrl
+      if (syncState.videoUrl) {
+        setActiveVideo(syncState.videoUrl);
+      }
       const latencySeconds = syncState.isPlaying && syncState.sentAt
         ? (Date.now() - syncState.sentAt) / 1000 : 0;
       pendingSyncState.current = {
@@ -165,32 +222,41 @@ function App() {
         isPlaying: Boolean(syncState.isPlaying),
       };
       if (videoRef.current) videoRef.current.load();
-      if (syncState.videoUrl === activeVideo) {
+      if (!syncState.videoUrl || syncState.videoUrl === activeVideo) {
         if (applySyncState(pendingSyncState.current)) pendingSyncState.current = null;
       }
     };
 
-    socket.on("joined-room", ({ roomId, users, state }) => {
-      setJoinedRoom(roomId);
-      setRoomUsers(users || []);
-      queueSyncState(state);
-    });
+    const onJoinedRoom = (data) => {
+      if (!data) return;
+      setJoinedRoom(data.roomId);
+      sessionStorage.setItem("streamana-room", data.roomId);
+      setRoomUsers(data.users || []);
+      queueSyncState(data.state);
+    };
 
-    socket.on("sync-state", ({ currentTime, isPlaying, videoUrl }) => {
-      queueSyncState({ currentTime, isPlaying, videoUrl });
-    });
+    const onSyncState = (data) => {
+      if (!data) return;
+      queueSyncState({ currentTime: data.currentTime, isPlaying: data.isPlaying, videoUrl: data.videoUrl });
+    };
 
-    socket.on("room-users", (users) => setRoomUsers(users));
+    const onRoomUsers = (users) => setRoomUsers(users || []);
 
-    socket.on("receive-message", ({ username, message, timestamp }) => {
-      setMessages((prev) => [...prev, { username, message, timestamp }]);
-    });
+    const onReceiveMessage = (data) => {
+      if (!data) return;
+      setMessages((prev) => [...prev, { username: data.username, message: data.message, timestamp: data.timestamp }]);
+    };
+
+    socket.on("joined-room", onJoinedRoom);
+    socket.on("sync-state", onSyncState);
+    socket.on("room-users", onRoomUsers);
+    socket.on("receive-message", onReceiveMessage);
 
     return () => {
-      socket.off("joined-room");
-      socket.off("sync-state");
-      socket.off("room-users");
-      socket.off("receive-message");
+      socket.off("joined-room", onJoinedRoom);
+      socket.off("sync-state", onSyncState);
+      socket.off("room-users", onRoomUsers);
+      socket.off("receive-message", onReceiveMessage);
     };
   }, [activeVideo, isEmbedVideo, isYoutubeVideo]);
 
@@ -223,7 +289,9 @@ function App() {
 
   const continueToRoom = () => {
     if (!username.trim()) return;
-    setUsername(username.trim());
+    const trimmed = username.trim();
+    setUsername(trimmed);
+    sessionStorage.setItem("streamana-username", trimmed);
     setHasUsername(true);
   };
 
@@ -231,6 +299,25 @@ function App() {
     if (!roomId.trim() || !username.trim()) return;
     socket.emit("join-room", { roomId: roomId.trim(), username: username.trim() });
   };
+
+  // Auto-rejoin room on page reload or socket reconnect
+  useEffect(() => {
+    const savedRoom = sessionStorage.getItem("streamana-room");
+    const savedUsername = sessionStorage.getItem("streamana-username");
+    if (savedRoom && savedUsername) {
+      socket.emit("join-room", { roomId: savedRoom, username: savedUsername });
+    }
+
+    const handleReconnect = () => {
+      const room = sessionStorage.getItem("streamana-room");
+      const user = sessionStorage.getItem("streamana-username");
+      if (room && user) {
+        socket.emit("join-room", { roomId: room, username: user });
+      }
+    };
+    socket.on("connect", handleReconnect);
+    return () => socket.off("connect", handleReconnect);
+  }, []);
 
   const loadVideo = () => {
     if (!videoUrl) return;
@@ -252,6 +339,7 @@ function App() {
     if (joinedRoom) {
       socket.emit("leave-room", { roomId: joinedRoom });
     }
+    sessionStorage.removeItem("streamana-room");
     setJoinedRoom("");
     setRoomUsers([]);
     setMessages([]);
@@ -512,7 +600,7 @@ function App() {
                     <YouTube
                       videoId={getYoutubeVideoId(activeVideo)}
                       className="youtube-player"
-                      opts={{ width: "100%", height: "100%", playerVars: { autoplay: 0 } }}
+                      opts={{ width: "100%", height: "100%", playerVars: { autoplay: 0, origin: window.location.origin } }}
                       onReady={(event) => {
                         youtubePlayerRef.current = event.target;
                         if (pendingSyncState.current && applySyncState(pendingSyncState.current)) {
@@ -594,4 +682,12 @@ function App() {
   );
 }
 
-export default App;
+function AppWithErrorBoundary() {
+  return (
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
+  );
+}
+
+export default AppWithErrorBoundary;
