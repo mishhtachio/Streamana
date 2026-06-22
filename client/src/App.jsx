@@ -70,6 +70,10 @@ function App() {
   const [messages, setMessages] = useState([]);
   const [messageInput, setMessageInput] = useState("");
 
+  // "idle" | "loading" | "ready" | "error"
+  const [playerStatus, setPlayerStatus] = useState("idle");
+  const [playerError, setPlayerError] = useState("");
+
   const [clock, setClock] = useState("");
 
   const videoRef = useRef(null);
@@ -81,6 +85,7 @@ function App() {
   const lastControlEmitAt = useRef(0);
   const lastRemoteSyncTarget = useRef(null);
   const messagesEndRef = useRef(null);
+  const playerLoadTimer = useRef(null);
 
   // Live clock
   useEffect(() => {
@@ -215,6 +220,8 @@ function App() {
         // Clear stale YouTube player ref before switching videos
         if (syncState.videoUrl !== activeVideo) {
           youtubePlayerRef.current = null;
+          setPlayerStatus("loading");
+          setPlayerError("");
         }
         setActiveVideo(syncState.videoUrl);
       }
@@ -328,6 +335,8 @@ function App() {
       alert("Please enter a valid http:// or https:// URL.");
       return;
     }
+    setPlayerStatus("loading");
+    setPlayerError("");
     setActiveVideo(videoUrl);
     socket.emit("change-video", { roomId: joinedRoom, videoUrl });
   };
@@ -585,6 +594,28 @@ function App() {
                 </div>
 
                 <div className="media-body">
+                  {/* Loading overlay */}
+                  {playerStatus === "loading" && (
+                    <div className="player-overlay">
+                      <div className="player-overlay-icon">⏳</div>
+                      <div className="player-overlay-text">Loading video...</div>
+                    </div>
+                  )}
+                  {/* Error overlay */}
+                  {playerStatus === "error" && (
+                    <div className="player-overlay">
+                      <div className="player-overlay-icon">⚠️</div>
+                      <div className="player-overlay-text">{playerError || "This video could not be loaded."}</div>
+                      <button className="win95-button" onClick={() => {
+                        setPlayerStatus("loading");
+                        setPlayerError("");
+                        // Force remount by toggling active video
+                        const url = activeVideo;
+                        setActiveVideo("");
+                        setTimeout(() => setActiveVideo(url), 100);
+                      }}>Retry</button>
+                    </div>
+                  )}
                   {isEmbedVideo ? (
                     <iframe
                       ref={embedPlayerRef}
@@ -594,9 +625,14 @@ function App() {
                       allowFullScreen
                       sandbox="allow-scripts allow-same-origin allow-presentation"
                       onLoad={() => {
+                        setPlayerStatus("ready");
                         if (pendingSyncState.current && applySyncState(pendingSyncState.current)) {
                           pendingSyncState.current = null;
                         }
+                      }}
+                      onError={() => {
+                        setPlayerStatus("error");
+                        setPlayerError("Failed to load the embedded video.");
                       }}
                     />
                   ) : isYoutubeVideo ? (
@@ -607,15 +643,39 @@ function App() {
                       opts={{ width: "100%", height: "100%", playerVars: { autoplay: 0 } }}
                       onReady={(event) => {
                         youtubePlayerRef.current = event.target;
+                        clearTimeout(playerLoadTimer.current);
+                        setPlayerStatus("ready");
                         if (pendingSyncState.current && applySyncState(pendingSyncState.current)) {
                           pendingSyncState.current = null;
                         }
+                        // Set a timeout: if the player hasn't started within 15s, warn the user
+                        playerLoadTimer.current = setTimeout(() => {
+                          const state = event.target.getPlayerState?.();
+                          // -1 = unstarted, 0 = ended, 3 = buffering
+                          if (state === -1 || state === 3) {
+                            setPlayerStatus("error");
+                            setPlayerError("Video is taking too long to load. It may be restricted or unavailable.");
+                          }
+                        }, 15000);
                       }}
-                      onPlay={() => { if (!isRemoteAction.current) emitPlaybackControl("play"); }}
+                      onPlay={() => {
+                        setPlayerStatus("ready");
+                        clearTimeout(playerLoadTimer.current);
+                        if (!isRemoteAction.current) emitPlaybackControl("play");
+                      }}
                       onPause={() => { if (!isRemoteAction.current) emitPlaybackControl("pause"); }}
                       onError={(err) => {
+                        clearTimeout(playerLoadTimer.current);
                         console.log("Youtube Player Error:", err);
-                        alert("This YouTube video cannot be embedded.");
+                        const errorMessages = {
+                          2: "Invalid video ID.",
+                          5: "This video can't be played in an embedded player.",
+                          100: "This video was not found or has been removed.",
+                          101: "The video owner does not allow embedded playback.",
+                          150: "The video owner does not allow embedded playback.",
+                        };
+                        setPlayerStatus("error");
+                        setPlayerError(errorMessages[err?.data] || "This YouTube video could not be loaded.");
                       }}
                     />
                   ) : (
@@ -623,15 +683,23 @@ function App() {
                       ref={videoRef}
                       className="retro-video"
                       controls
-                      onPlay={() => { if (!isRemoteAction.current) emitPlaybackControl("play"); }}
+                      onPlay={() => {
+                        setPlayerStatus("ready");
+                        if (!isRemoteAction.current) emitPlaybackControl("play");
+                      }}
                       onPause={() => { if (!isRemoteAction.current) emitPlaybackControl("pause"); }}
                       onSeeked={() => {
                         if (!isRemoteAction.current) emitPlaybackControl("seek", videoRef.current.currentTime);
                       }}
                       onLoadedMetadata={() => {
+                        setPlayerStatus("ready");
                         if (pendingSyncState.current && applySyncState(pendingSyncState.current)) {
                           pendingSyncState.current = null;
                         }
+                      }}
+                      onError={() => {
+                        setPlayerStatus("error");
+                        setPlayerError("Failed to load the video. The URL may be invalid or the format unsupported.");
                       }}
                     >
                       <source src={activeVideo} type="video/mp4" />
