@@ -211,8 +211,11 @@ function App() {
   useEffect(() => {
     const queueSyncState = (syncState) => {
       if (!syncState) return;
-      // Guard against undefined/null videoUrl
       if (syncState.videoUrl) {
+        // Clear stale YouTube player ref before switching videos
+        if (syncState.videoUrl !== activeVideo) {
+          youtubePlayerRef.current = null;
+        }
         setActiveVideo(syncState.videoUrl);
       }
       const latencySeconds = syncState.isPlaying && syncState.sentAt
@@ -598,6 +601,7 @@ function App() {
                     />
                   ) : isYoutubeVideo ? (
                     <YouTube
+                      key={getYoutubeVideoId(activeVideo)}
                       videoId={getYoutubeVideoId(activeVideo)}
                       className="youtube-player"
                       opts={{ width: "100%", height: "100%", playerVars: { autoplay: 0, origin: window.location.origin } }}
