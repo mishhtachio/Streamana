@@ -187,8 +187,9 @@ function App() {
         return false;
       }
       try {
-        embedPlayerRef.current.contentWindow.postMessage({ type: "PLAYER_SEEK", currentTime }, "*");
-        embedPlayerRef.current.contentWindow.postMessage({ type: isPlaying ? "PLAYER_PLAY" : "PLAYER_PAUSE" }, "*");
+        const targetOrigin = new URL(activeVideo).origin;
+        embedPlayerRef.current.contentWindow.postMessage({ type: "PLAYER_SEEK", currentTime }, targetOrigin);
+        embedPlayerRef.current.contentWindow.postMessage({ type: isPlaying ? "PLAYER_PLAY" : "PLAYER_PAUSE" }, targetOrigin);
       } catch {
         // Ignore iframe communication errors
       }

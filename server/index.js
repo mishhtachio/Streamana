@@ -4,18 +4,25 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
+const helmet = require("helmet");
 const PORT = process.env.PORT || 3001;
 
 const app = express();
 
-app.use(cors());
+const ALLOWED_ORIGINS = process.env.CLIENT_ORIGIN
+  ? process.env.CLIENT_ORIGIN.split(",")
+  : ["http://localhost:5173", "http://localhost:3000"];
+
+app.use(cors({ origin: ALLOWED_ORIGINS }));
+app.use(helmet());
 
 const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: "*",
+    origin: ALLOWED_ORIGINS,
   },
+  maxHttpBufferSize: 1e4, // 10 KB max payload
 });
 
 server.listen(PORT, () => {
@@ -30,6 +37,16 @@ const userNames = Object.create(null);
 const roomUsers = Object.create(null);
 // Track playback state for each room
 const roomStates = Object.create(null);
+
+// --- Security Limits ---
+
+const MAX_ROOMS = 500;
+const MAX_USERNAME_LENGTH = 30;
+const MAX_CONNECTIONS_PER_IP = 10;
+const connectionCounts = Object.create(null);
+
+const sanitizeForLog = (str, maxLen = 50) =>
+  typeof str === "string" ? str.slice(0, maxLen).replace(/[\n\r]/g, " ") : "[invalid]";
 
 // --- Validation Helpers (Issue #1) ---
 
@@ -183,6 +200,17 @@ const leaveAllRooms = (socket) => {
   }
 };
 
+// --- Connection Limiting ---
+
+io.use((socket, next) => {
+  const ip = socket.handshake.address;
+  connectionCounts[ip] = (connectionCounts[ip] || 0) + 1;
+  if (connectionCounts[ip] > MAX_CONNECTIONS_PER_IP) {
+    return next(new Error("Too many connections"));
+  }
+  next();
+});
+
 // --- Socket Connection ---
 
 io.on("connection", (socket) => {
@@ -210,6 +238,10 @@ io.on("connection", (socket) => {
             : socket.id);
 
     if (!isValidRoomId(roomId)) return;
+    if (username.length > MAX_USERNAME_LENGTH) return;
+
+    // Enforce max room limit (H5)
+    if (!roomStates[roomId] && Object.keys(roomStates).length >= MAX_ROOMS) return;
 
     // Leave all previously joined rooms before joining a new one (Issue #2)
     leaveAllRooms(socket);
@@ -229,7 +261,7 @@ io.on("connection", (socket) => {
     userRooms[socket.id] = [roomId];
 
     console.log(
-      `${userNames[socket.id]} joined room ${roomId}`
+      `${sanitizeForLog(userNames[socket.id])} joined room ${sanitizeForLog(roomId)}`
     );
 
     // Initialize room state if it doesn't exist
@@ -272,7 +304,7 @@ io.on("connection", (socket) => {
     if (!isValidRoomId(roomId)) return;
 
     console.log(
-      `${userNames[socket.id] || socket.id} left room ${roomId}`
+      `${sanitizeForLog(userNames[socket.id] || socket.id)} left room ${sanitizeForLog(roomId)}`
     );
 
     leaveRoom(socket, roomId);
@@ -424,7 +456,7 @@ io.on("connection", (socket) => {
     const username = userNames[socket.id] || "Anonymous";
 
     console.log(
-      `${username} sent message in ${roomId}: ${message}`
+      `${sanitizeForLog(username)} sent message in ${sanitizeForLog(roomId)}`
     );
 
     io.to(roomId).emit("receive-message", {
@@ -463,6 +495,12 @@ io.on("connection", (socket) => {
 
     if (!requesterId || typeof requesterId !== "string") return;
 
+    // Validate sender and target share a room (M5)
+    const senderRooms = userRooms[socket.id] || [];
+    const targetRooms = userRooms[requesterId] || [];
+    const sharedRoom = senderRooms.some((r) => targetRooms.includes(r));
+    if (!sharedRoom) return;
+
     io.to(requesterId).emit("sync-state", {
       currentTime,
       isPlaying,
@@ -473,7 +511,7 @@ io.on("connection", (socket) => {
 
   // DISCONNECT
 
-  socket.on("disconnecting", () => {
+  socket.on("disconnecting", safeHandler(() => {
 
     console.log(
       "User disconnecting:",
@@ -492,6 +530,13 @@ io.on("connection", (socket) => {
       }
     }
 
-  }); //safe safe
+    // Decrement connection count for this IP
+    const ip = socket.handshake.address;
+    if (connectionCounts[ip]) {
+      connectionCounts[ip]--;
+      if (connectionCounts[ip] <= 0) delete connectionCounts[ip];
+    }
+
+  }));
 
 });
