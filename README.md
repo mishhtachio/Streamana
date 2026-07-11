@@ -2,6 +2,12 @@
 
 Streamana is a retro (sorta Y2K inspired) watch together platform that allows multiple users to watch videos in sync in realtime.
 
+## Screenshots
+
+![Login Screen](assets/login-screen.png)
+
+![Watch Room](assets/watch-room.png)
+
 ---
 
 ## Features
