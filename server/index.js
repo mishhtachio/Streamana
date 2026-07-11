@@ -11,7 +11,7 @@ const app = express();
 
 const ALLOWED_ORIGINS = process.env.CLIENT_ORIGIN
   ? process.env.CLIENT_ORIGIN.split(",")
-  : ["http://localhost:5173", "http://localhost:3000"];
+  : ["http://localhost:5173", "http://localhost:3000", "https://streamana.vercel.app"];
 
 app.use(cors({ origin: ALLOWED_ORIGINS }));
 app.use(helmet());
