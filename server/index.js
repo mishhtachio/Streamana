@@ -11,7 +11,7 @@ const app = express();
 
 const ALLOWED_ORIGINS = process.env.CLIENT_ORIGIN
   ? process.env.CLIENT_ORIGIN.split(",")
-  : ["http://localhost:5173", "http://localhost:3000", "https://streamana.vercel.app"];
+  : ["http://localhost:5173", "http://localhost:3000", "https://streamama.onrender.com"];
 
 app.use(cors({ origin: ALLOWED_ORIGINS }));
 app.use(helmet());
@@ -99,9 +99,9 @@ const safeHandler = (handler) => (...args) => {
 const RATE_LIMITS = {
   "send-message": { windowMs: 1000, max: 3 },
   "change-video": { windowMs: 5000, max: 2 },
-  "play":         { windowMs: 500,  max: 3 },
-  "pause":        { windowMs: 500,  max: 3 },
-  "seek":         { windowMs: 500,  max: 5 },
+  "play": { windowMs: 500, max: 3 },
+  "pause": { windowMs: 500, max: 3 },
+  "seek": { windowMs: 500, max: 5 },
 };
 
 const rateLimitState = Object.create(null);
@@ -227,15 +227,15 @@ io.on("connection", (socket) => {
       typeof joinData === "string"
         ? joinData.trim()
         : (joinData.roomId
-            ? String(joinData.roomId).trim()
-            : "");
+          ? String(joinData.roomId).trim()
+          : "");
 
     const username =
       typeof joinData === "string"
         ? socket.id
         : (joinData.username
-            ? String(joinData.username).trim()
-            : socket.id);
+          ? String(joinData.username).trim()
+          : socket.id);
 
     if (!isValidRoomId(roomId)) return;
     if (username.length > MAX_USERNAME_LENGTH) return;
@@ -298,8 +298,8 @@ io.on("connection", (socket) => {
       typeof data === "string"
         ? data.trim()
         : (data.roomId
-            ? String(data.roomId).trim()
-            : "");
+          ? String(data.roomId).trim()
+          : "");
 
     if (!isValidRoomId(roomId)) return;
 
